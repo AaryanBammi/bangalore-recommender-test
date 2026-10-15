@@ -128,7 +128,7 @@ Frontend ◀──────────── top 5 + explanations ───�
 
 ### 6.1 Filter Layer (R4)
 - Hard filters: `location`, `cuisine` (any overlap), `rating >= min_rating`, `budget_tier`.
-- Pre-rank by `rating` and then `votes`. Keep the **top 300 candidates** (the diagram's 300–400, set by `CANDIDATE_LIMIT`), and send them to the LLM in a compact one-line-per-row format.
+- Pre-rank by `rating` and then `votes`. Keep the **top 50 candidates** (set by `CANDIDATE_LIMIT`; lowered from the diagram's 300–400 to fit Groq's free-tier limit of 8k tokens per minute), and send them to the LLM in a compact one-line-per-row format.
 - **Fallbacks when there are zero or very few results:** relax the constraints in a fixed order (budget, then rating, then cuisine, then a nearby zone). Tell the user what was relaxed.
 
 ### 6.2 Prompt Design (R5, R6)
@@ -161,11 +161,11 @@ For each recommendation, show the **name, cuisine(s), rating, estimated cost for
 |---|---|---|
 | Language | Python 3.11+ | Best fit for the HF `datasets` library and pandas |
 | Data | `datasets`, `pandas`, `pyarrow`, `ftfy` | |
-| LLM | Claude via the `anthropic` SDK (default `claude-haiku-5-5`; `claude-sonnet-5-5` for better reasoning) | |
+| LLM | Groq via the `groq` SDK (default `openai/gpt-oss-120b`; `openai/gpt-oss-20b` for lower latency) | Strict JSON-schema structured output |
 | Validation | `pydantic` | API request/response and LLM output schema |
 | API | FastAPI + uvicorn | All frontend ↔ backend traffic goes through the API |
 | UI | Streamlit | API client only (`httpx`) |
-| Config | `.env` with `ANTHROPIC_API_KEY` (never committed) | `python-dotenv` |
+| Config | `.env` with `GROQ_API_KEY` (never committed) | `python-dotenv` |
 | Tests | `pytest` | Parsing, filtering, prompt building, and output validation with a mocked LLM |
 
 ### 7.1 Layout
@@ -188,7 +188,7 @@ See [architecture.md §7](architecture.md#7-project-layout). The backend lives i
 1. Should the UI explicitly say the data covers Bangalore only, or should "city" be dropped in favor of "locality"?
 2. ~~Are the budget thresholds acceptable?~~ **Resolved in Phase 0:** they were revised to 300 / 700 (§5).
 3. ~~Is a separate API needed?~~ **Resolved:** yes. FastAPI backend, with Streamlit as the API client.
-4. Is there a cost ceiling for the LLM? 300 candidates is roughly 15–20k input tokens per request.
+4. Is the Groq free tier enough? It allows 8k tokens per minute, so about 2–3 requests per minute at 50 candidates. A paid tier would allow the full 300–400 candidates.
 5. Should review snippets be included? They improve the explanations but add tokens and preprocessing work.
 
 ---

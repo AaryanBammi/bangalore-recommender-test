@@ -214,11 +214,11 @@ Resolve these before building. The edge cases below assume the proposed resoluti
 
 | ID | Scenario | Expected |
 |---|---|---|
-| O1 | `ANTHROPIC_API_KEY` missing | Fail at startup with a clear message (G1) |
+| O1 | `GROQ_API_KEY` missing | Fail at startup with a clear message (G1) |
 | O2 | `CANDIDATE_LIMIT` / `TOP_K` is not an int, or ≤ 0 | Fail at startup with a config error |
 | O3 | `TOP_K` > `CANDIDATE_LIMIT` | Fail at startup with a config error |
 | O4 | `LLM_MODEL` is an invalid model ID | First request is degraded (L10-like), and the error is logged |
-| O5 | Several requests at once | The catalogue is read-only, so it's safe. **Define the endpoints with `def`, not `async def`**, so the blocking `anthropic` call runs in FastAPI's thread pool instead of blocking the event loop. |
+| O5 | Several requests at once | The catalogue is read-only, so it's safe. **Define the endpoints with `def`, not `async def`**, so the blocking `groq` call runs in FastAPI's thread pool instead of blocking the event loop. |
 | O6 | Port 8000 is already in use | uvicorn errors; the README documents `--port` and `API_URL` |
 | O7 | `.env` is accidentally committed | Prevented by `.gitignore`; only `.env.example` is committed |
 | O8 | Tests run without network or an API key | All tests pass. The catalogue fixture and the LLM are mocked (plan §2.4). |

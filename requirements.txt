@@ -4,7 +4,7 @@ pandas
 pyarrow
 datasets
 ftfy
-anthropic
+groq
 pydantic
 python-dotenv
 streamlit

@@ -78,15 +78,16 @@ A pure function, `filter_restaurants(df, prefs) -> DataFrame`, applies these fil
 | Keyword hints from `preference` | `"delivery"` → `online_order`, `"book"`/`"reservation"` → `book_table` |
 
 - **Sort:** `rating` descending, then `votes` descending.
-- **Cap:** keep at most `CANDIDATE_LIMIT`, which defaults to **300** (matching the diagram's 300–400).
+- **Cap:** keep at most `CANDIDATE_LIMIT`, which defaults to **50**. The diagram asked for 300–400, but Groq's free tier allows 8,000 tokens per minute, and each candidate costs about 47 tokens (202 candidates came to 10.5k tokens and were rejected with HTTP 413). Raise the cap on a paid Groq tier.
 - **Relaxation:** if fewer than 5 rows match, drop the budget filter, then lower the rating by 0.5. Each relaxation is reported in the response's `notes`.
 
 ### 2.3 LLM (`backend/llm.py`)
 
 The LLM picks the top 5 from the candidates and explains each pick.
 
-- **Model:** Claude through the `anthropic` SDK, with the model set by config. The default is `claude-haiku-5-5`, chosen because the prompt holds 300+ candidates; use `claude-sonnet-5-5` for better reasoning. Temperature is low.
-- **Compact candidate format:** one line per restaurant keeps the prompt small (300 rows ≈ 15–20k tokens):
+- **Model:** an LLM served by **Groq** through the `groq` SDK (`client.chat.completions.create`), with the model set by `LLM_MODEL`. The default is `openai/gpt-oss-120b`, a Groq production model with a 131k-token context and support for strict structured output; `openai/gpt-oss-20b` is faster. The call uses `reasoning_effort="low"` and `include_reasoning=False` to keep latency down.
+- **Structured output:** `response_format` is a strict `json_schema` (every field required, no extra keys; `summary` is `string | null`), and the response is still validated with Pydantic (`LLMResult`). Groq returns a 400 when output fails schema validation, so a 400 is retried once like a timeout. 401 and 404 (bad key, unknown model) are not retried.
+- **Compact candidate format:** one line per restaurant keeps the prompt small (about 47 tokens per row, so 50 rows ≈ 3k tokens):
 
   ```text
   id | name | cuisines | rating | votes | cost_for_two | rest_type | online_order | book_table | dish_liked(≤5)
@@ -181,7 +182,7 @@ class RecommendationRequest(BaseModel):
 | Unknown location | `400` `{"detail": "Unknown location. See /options."}` |
 | No matches, even after relaxation | `200` with `recommendations: []` and a note |
 | LLM failure | `200` with `degraded: true` and null explanations |
-| Missing `ANTHROPIC_API_KEY` | API fails at startup with a clear message |
+| Missing `GROQ_API_KEY` | API fails at startup with a clear message |
 
 ---
 
@@ -229,9 +230,10 @@ Settings come from `.env`, loaded with `python-dotenv`:
 
 | Variable | Default | Used by |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | (required) | backend |
-| `LLM_MODEL` | `claude-haiku-5-5` | backend |
-| `CANDIDATE_LIMIT` | `300` | backend |
+| `GROQ_API_KEY` | (required) | backend |
+| `LLM_MODEL` | `openai/gpt-oss-120b` | backend |
+| `LLM_TIMEOUT_S` | `25` | backend |
+| `CANDIDATE_LIMIT` | `50` | backend |
 | `TOP_K` | `5` | backend |
 | `API_URL` | `http://localhost:8000` | frontend |
 
@@ -251,7 +253,7 @@ nextleap1/
 │   ├── api.py            # FastAPI app + endpoints
 │   ├── catalogue.py      # ingestion + in-memory catalogue
 │   ├── filters.py        # filter + relaxation
-│   ├── llm.py            # prompt, Claude call, validate + join
+│   ├── llm.py            # prompt, Groq call, validate + join
 │   └── models.py         # request/response Pydantic models
 ├── frontend/
 │   └── app.py            # Streamlit UI (API client only)
@@ -261,7 +263,7 @@ nextleap1/
 │   ├── test_filters.py   # filters + relaxation
 │   └── test_api.py       # endpoints with LLM mocked
 ├── requirements.txt      # fastapi, uvicorn, pandas, pyarrow, datasets, ftfy,
-│                         # anthropic, pydantic, python-dotenv, streamlit, httpx, pytest
+│                         # groq, pydantic, python-dotenv, streamlit, httpx, pytest
 ├── .env.example
 └── README.md
 ```

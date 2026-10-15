@@ -29,10 +29,10 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3
 
 ### Tasks
 1. Create the folder layout from architecture §7: `backend/`, `frontend/`, `tests/`, and `data/`, each with an empty `__init__.py` where needed.
-2. Add `requirements.txt`, listing fastapi, uvicorn, pandas, pyarrow, datasets, ftfy, anthropic, pydantic, python-dotenv, streamlit, httpx, and pytest.
+2. Add `requirements.txt`, listing fastapi, uvicorn, pandas, pyarrow, datasets, ftfy, groq, pydantic, python-dotenv, streamlit, httpx, and pytest.
 3. Add the support files:
    - `.gitignore`, covering `.env`, `data/`, `__pycache__/`, and `.venv/`
-   - `.env.example`, covering `ANTHROPIC_API_KEY`, `LLM_MODEL`, `CANDIDATE_LIMIT`, `TOP_K`, and `API_URL`
+   - `.env.example`, covering `GROQ_API_KEY`, `LLM_MODEL`, `CANDIDATE_LIMIT`, `TOP_K`, and `API_URL`
 4. Create a virtual environment and install the dependencies.
 5. **Data check:** load the HF dataset in a scratch notebook or script, and confirm:
    - the distinct non-numeric `rate` values (`NEW`, `-`, nulls?)
@@ -73,7 +73,7 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3
 
 ### 1.3 Filter (`backend/filters.py`), architecture §2.2
 1. Write `filter_restaurants(df, req) -> (DataFrame, notes)`, applying the location, cuisine overlap, rating, budget, and keyword-hint filters (delivery and booking).
-2. Sort by rating, then votes, and cap at `CANDIDATE_LIMIT` (300).
+2. Sort by rating, then votes, and cap at `CANDIDATE_LIMIT` (50 by default; see architecture §2.2).
 3. Add relaxation for when fewer than 5 rows match: drop the budget filter, then lower the rating by 0.5. Append a human-readable note for each relaxation.
 
 ### 1.4 API (`backend/api.py`), architecture §2.4
@@ -97,7 +97,7 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3
 
 ## Phase 2: LLM Ranking
 
-**Goal:** add the **LLM** step. The LLM ranks the 300 candidates, explains its picks, and returns the top 5.
+**Goal:** add the **LLM** step. The LLM ranks up to `CANDIDATE_LIMIT` candidates, explains its picks, and returns the top 5.
 
 ### 2.1 Prompt (`backend/llm.py`), architecture §2.3
 1. Write `format_candidates(df) -> str`, which produces one line per row: `id | name | cuisines | rating | votes | cost_for_two | rest_type | online_order | book_table | dish_liked(≤5)`.
@@ -105,7 +105,7 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3
 3. Write the user message, which contains the user's preferences, including the free-text `preference`, and then the candidate block.
 
 ### 2.2 LLM Call
-1. Write `rank_with_llm(req, candidates) -> (picks, summary)`, using the `anthropic` SDK with `LLM_MODEL`, low temperature, a `max_tokens` cap, and a timeout.
+1. Write `rank_with_llm(req, candidates) -> (picks, summary)`, using the `groq` SDK with `LLM_MODEL`, strict JSON-schema output, a token cap, and a timeout. (Implemented as `GroqRanker`.)
 2. Parse the response into a Pydantic `LLMResult`. On a parse or validation failure, retry **once**.
 3. **Grounding:** drop IDs that aren't in the candidates, deduplicate, keep the order, and cap at `TOP_K`.
 
@@ -113,7 +113,7 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3
 1. In `POST /recommendations`, replace the Phase 1 placeholder with this sequence: filter, then `rank_with_llm`, then join each pick's facts from the catalogue by `id`, then build the response.
 2. If the LLM returns fewer valid picks than `TOP_K`, top up from the pre-sorted candidates with `explanation: null`.
 3. **Fallback:** on a timeout, API error, or second parse failure, return the top 5 pre-sorted candidates with `degraded: true` and no explanations.
-4. Check at startup: a missing `ANTHROPIC_API_KEY` stops startup with a clear message.
+4. Check at startup: a missing `GROQ_API_KEY` stops startup with a clear message.
 
 ### 2.4 Tests (LLM mocked)
 - **`test_llm.py`:**
@@ -132,13 +132,13 @@ Run 3–5 real requests (different localities, budgets, and cuisines) and check 
 - the picks match the preferences
 - the explanations mention real fields
 - there are no invented restaurants
-- latency and token use are acceptable (about 15–20k input tokens). If not, lower `CANDIDATE_LIMIT` or try another model.
+- latency and token use are acceptable (measured: 1.7–3.2 s, under 4k tokens per request at 50 candidates). If not, lower `CANDIDATE_LIMIT` or try another model.
 
 ### Exit Criteria
-- [ ] `POST /recommendations` returns 5 ranked items with explanations and a summary
-- [ ] Removing the API key or forcing an error gives a `degraded: true` response, not a 500
-- [ ] All tests pass without network access
-- [ ] The manual check looks sensible
+- [x] `POST /recommendations` returns 5 ranked items with explanations and a summary (Groq `openai/gpt-oss-120b`, 1.7–3.2 s)
+- [x] Forcing an LLM error gives a `degraded: true` response, not a 500 (mocked, plus live with an invalid `LLM_MODEL`). A missing API key stops startup with a clear message (edge_case G1, verified live).
+- [x] All tests pass without network access (90)
+- [x] The manual check looks sensible (eval.md G1–G5: 100% grounded, injection ignored, unverifiable preferences flagged)
 
 ---
 
@@ -199,5 +199,5 @@ Run 3–5 real requests (different localities, budgets, and cuisines) and check 
 |---|---|---|
 | Data quality differs from what we assumed | Phase 0 data check before writing any logic | 0 |
 | The first HF download is slow or large | Cache to Parquet; tests use fixtures, never the download | 1 |
-| 300 candidates is too slow or costly | `CANDIDATE_LIMIT` is configurable; measure in the 2.5 manual check | 2 |
+| Groq free tier: 8k tokens per minute | `CANDIDATE_LIMIT` lowered to 50 (about 3k tokens per request); a 429 waits for `retry-after` (≤ 5 s) and retries once; otherwise degraded | 2 |
 | The LLM returns bad JSON or invented IDs | Pydantic validation, one retry, ID allow-list, degraded fallback | 2 |

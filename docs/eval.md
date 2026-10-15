@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | 0 | Setup and data check | ✅ | 2026-10-15 | All 9 checks pass. Budget tiers revised to 300 / 700 (0.8). 12,499 restaurants after dedupe. |
 | 1 | Catalogue, filter, and API | ✅ | 2026-10-15 | 64 tests pass offline. 12,450 restaurants after cleaning. Warm start 1.1 s. A typical query yields only ~8 candidates (not 300–400). |
-| 2 | LLM ranking | ⬜ | | |
+| 2 | LLM ranking | ✅ | 2026-10-15 | 90 tests pass offline. Golden queries G1–G5 (+G4b) on Groq `openai/gpt-oss-120b`: grounding, fact accuracy, and constraint fit 100%; 1.7–3.2 s; ≤ 3.8k tokens. Drills 2.4 and 2.5 pass. `CANDIDATE_LIMIT` lowered to 50 for the free tier (8k tokens per minute). |
 | 3 | Frontend and wrap-up | ⬜ | | |
 
 Status key: ⬜ not started · 🟨 in progress · ✅ passed · ❌ failed
@@ -25,7 +25,7 @@ Status key: ⬜ not started · 🟨 in progress · ✅ passed · ❌ failed
 | 0.1 | Dependencies install | `pip install -r requirements.txt` | Exit code 0 |
 | 0.2 | Test runner works | `pytest` | "no tests ran", with no errors |
 | 0.3 | Secrets are ignored | `git check-ignore .env data/` | Both paths printed |
-| 0.4 | `.env.example` is complete | Inspect the file | It has all 5 variables: `ANTHROPIC_API_KEY`, `LLM_MODEL`, `CANDIDATE_LIMIT`, `TOP_K`, `API_URL` |
+| 0.4 | `.env.example` is complete | Inspect the file | It has all 6 variables: `GROQ_API_KEY`, `LLM_MODEL`, `LLM_TIMEOUT_S`, `CANDIDATE_LIMIT`, `TOP_K`, `API_URL` |
 | 0.5 | Rating formats known | Data check script | Distinct non-numeric `rate` values listed in context §3.2 |
 | 0.6 | Cost format known | Data check script | Comma presence confirmed or ruled out in context §3.2 |
 | 0.7 | Row counts known | Data check script | Raw (~51.7k) and deduplicated counts recorded |
@@ -40,7 +40,7 @@ Status key: ⬜ not started · 🟨 in progress · ✅ passed · ❌ failed
 | # | Check | Pass if |
 |---|---|---|
 | 1.1 | `pytest tests/test_catalogue.py` | Green. Covers I7–I14 (rate and cost parsing, tier boundaries 500/501/1200/1201) and I22 (dedupe) |
-| 1.2 | `pytest tests/test_filters.py` | Green. Covers each filter on its own, the 300 cap (F17), relaxation order and notes (F13), and empty after relaxation (F14) |
+| 1.2 | `pytest tests/test_filters.py` | Green. Covers each filter on its own, the candidate cap (F17), relaxation order and notes (F13), and empty after relaxation (F14) |
 | 1.3 | `pytest tests/test_api.py` | Green. Covers `/health`, `/options`, unknown location → 400 (A3), bad budget → 422 (A1), and the happy path returning ≤ 5 items |
 | 1.4 | Tests run offline | Pass with the network disabled (fixture catalogue, no HF download) |
 
@@ -92,13 +92,13 @@ Run each query against the real backend. Replace `<loc>` with real localities fr
 | **Latency:** end-to-end `POST /recommendations` | ≤ 15 s per query |
 | **Tokens:** input tokens per request (from logs or the SDK usage field) | ≤ 25k |
 
-**If latency or token use fails:** lower `CANDIDATE_LIMIT` (e.g., to 150), re-run G1–G5, and record the new value in architecture §6.
+**If latency or token use fails:** lower `CANDIDATE_LIMIT`, re-run G1–G5, and record the new value in architecture §6.
 
 ### Failure Drills
 | # | Drill | Pass if |
 |---|---|---|
 | 2.4 | Force an LLM error (bad `LLM_MODEL` or a monkeypatched raise) | `200` with `degraded: true`, 5 pre-sorted items, null explanations, **no 500** |
-| 2.5 | Unset `ANTHROPIC_API_KEY` and start the backend | Startup fails with a clear message (edge_case G1) |
+| 2.5 | Unset `GROQ_API_KEY` and start the backend | Startup fails with a clear message (edge_case G1) |
 
 ---
 
@@ -107,7 +107,7 @@ Run each query against the real backend. Replace `<loc>` with real localities fr
 | # | Check | How | Pass if |
 |---|---|---|---|
 | 3.1 | End-to-end flow | Backend and frontend running, submit G1 from the browser | 5 cards, each with **name, cuisines, rating, ₹ cost, and explanation**, plus the summary (R10) |
-| 3.2 | API-only frontend | `grep -E "pandas\|anthropic\|catalogue" frontend/app.py` | No matches. The frontend talks only over HTTP. |
+| 3.2 | API-only frontend | `grep -E "pandas\|groq\|catalogue" frontend/app.py` | No matches. The frontend talks only over HTTP. |
 | 3.3 | Dropdowns from the API | Inspect the form | Location and cuisine lists match `/options` |
 | 3.4 | Backend down | Stop uvicorn, reload the page | Clear "backend not reachable" message, no stack trace (U1) |
 | 3.5 | No results | Submit a query that matches nothing | Empty-state message (U6) |
