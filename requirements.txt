@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pandas
+pyarrow
+datasets
+ftfy
+anthropic
+pydantic
+python-dotenv
+streamlit
+httpx
+pytest
