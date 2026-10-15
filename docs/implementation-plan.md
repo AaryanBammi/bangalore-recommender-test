@@ -88,10 +88,10 @@ Phase 0 ──▶ Phase 1 ──▶ Phase 2 ──▶ Phase 3
 - **`test_api.py`:** `/health`, `/options`, an unknown location → 400, an invalid budget → 422, and the happy path returning ≤ 5 items. The catalogue fixture is injected, so there's no HF download.
 
 ### Exit Criteria
-- [ ] `uvicorn backend.api:app` starts. The first run creates `data/restaurants.parquet`, and later starts are fast.
-- [ ] `/docs` shows all 3 endpoints
-- [ ] `curl -X POST /recommendations` with a valid body returns 5 real restaurants (no explanations yet)
-- [ ] All Phase 1 tests pass
+- [x] `uvicorn backend.api:app` starts. The first run creates `data/restaurants.parquet` (~40 s, 12,450 restaurants), and later starts take 1.1 s.
+- [x] `/docs` shows all 3 endpoints
+- [x] `curl -X POST /recommendations` with a valid body returns 5 real restaurants (no explanations yet)
+- [x] All Phase 1 tests pass (64)
 
 ---
 

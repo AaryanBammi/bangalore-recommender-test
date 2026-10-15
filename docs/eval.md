@@ -10,7 +10,7 @@
 | Phase | Gate | Status | Date | Notes |
 |---|---|---|---|---|
 | 0 | Setup and data check | ✅ | 2026-10-15 | All 9 checks pass. Budget tiers revised to 300 / 700 (0.8). 12,499 restaurants after dedupe. |
-| 1 | Catalogue, filter, and API | ⬜ | | |
+| 1 | Catalogue, filter, and API | ✅ | 2026-10-15 | 64 tests pass offline. 12,450 restaurants after cleaning. Warm start 1.1 s. A typical query yields only ~8 candidates (not 300–400). |
 | 2 | LLM ranking | ⬜ | | |
 | 3 | Frontend and wrap-up | ⬜ | | |
 
