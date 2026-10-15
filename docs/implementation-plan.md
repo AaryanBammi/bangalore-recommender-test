@@ -175,10 +175,10 @@ Run 3–5 real requests (different localities, budgets, and cuisines) and check 
 3. Review the docs and update anything that changed during the build (thresholds, limits, model).
 
 ### Exit Criteria
-- [ ] With the backend and frontend running, the full flow **UI → API → Filter → Catalogue → LLM → UI** works from the browser
-- [ ] Error states display cleanly: API down, no results, degraded
-- [ ] Following the README from a fresh clone gets the app running
-- [ ] Every item in the context §10 definition of done is checked
+- [x] With the backend and frontend running, the full flow **UI → API → Filter → Catalogue → LLM → UI** works (driven live with Streamlit AppTest against the real backend and Groq)
+- [x] Error states display cleanly: API down, no results, degraded, timeout, 400/422/500 (12 UI tests)
+- [x] Following the README from a fresh clone gets the app running (verified in a clean clone and venv)
+- [x] Every item in the context §10 definition of done is checked
 
 ---
 

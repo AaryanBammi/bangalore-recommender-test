@@ -195,11 +195,11 @@ See [architecture.md §7](architecture.md#7-project-layout). The backend lives i
 
 ## 10. Definition of Done
 
-- [ ] Backend ingestion builds a clean catalogue from the HF dataset
-- [ ] The FastAPI backend exposes `/options` and `/recommendations`
-- [ ] The UI collects all five preference inputs and talks to the backend only through the API
-- [ ] Filtering, with fallbacks, produces a bounded candidate set
-- [ ] The LLM returns a ranked, explained, schema-valid JSON list (plus an optional summary)
-- [ ] The UI shows the top recommendations with name, cuisine, rating, cost, and explanation
-- [ ] Tests cover parsing, filtering, prompt building, and LLM output handling (mocked)
-- [ ] The README has setup and run instructions
+- [x] Backend ingestion builds a clean catalogue from the HF dataset
+- [x] The FastAPI backend exposes `/options` and `/recommendations`
+- [x] The UI collects all five preference inputs and talks to the backend only through the API
+- [x] Filtering, with fallbacks, produces a bounded candidate set
+- [x] The LLM returns a ranked, explained, schema-valid JSON list (plus an optional summary)
+- [x] The UI shows the top recommendations with name, cuisine, rating, cost, and explanation
+- [x] Tests cover parsing, filtering, prompt building, and LLM output handling (mocked)
+- [x] The README has setup and run instructions

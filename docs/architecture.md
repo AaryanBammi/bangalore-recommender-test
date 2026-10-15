@@ -248,7 +248,10 @@ nextleap1/
 ├── docs/
 │   ├── problem_statement.txt
 │   ├── context.md
-│   └── architecture.md
+│   ├── architecture.md
+│   ├── implementation-plan.md
+│   ├── edge_case.md
+│   └── eval.md
 ├── backend/
 │   ├── api.py            # FastAPI app + endpoints
 │   ├── catalogue.py      # ingestion + in-memory catalogue
@@ -258,10 +261,15 @@ nextleap1/
 ├── frontend/
 │   └── app.py            # Streamlit UI (API client only)
 ├── data/                 # git-ignored; restaurants.parquet
+├── scripts/
+│   └── data_check.py     # Phase 0 dataset verification
 ├── tests/
+│   ├── conftest.py       # small in-memory catalogue fixture
 │   ├── test_catalogue.py # rate/cost parsing, dedupe
 │   ├── test_filters.py   # filters + relaxation
-│   └── test_api.py       # endpoints with LLM mocked
+│   ├── test_llm.py       # prompt format, grounding, retries (Groq mocked)
+│   ├── test_api.py       # endpoints with LLM mocked
+│   └── test_frontend.py  # Streamlit UI states via streamlit.testing (HTTP faked)
 ├── requirements.txt      # fastapi, uvicorn, pandas, pyarrow, datasets, ftfy,
 │                         # groq, pydantic, python-dotenv, streamlit, httpx, pytest
 ├── .env.example

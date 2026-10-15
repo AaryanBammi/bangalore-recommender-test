@@ -12,7 +12,7 @@
 | 0 | Setup and data check | ✅ | 2026-10-15 | All 9 checks pass. Budget tiers revised to 300 / 700 (0.8). 12,499 restaurants after dedupe. |
 | 1 | Catalogue, filter, and API | ✅ | 2026-10-15 | 64 tests pass offline. 12,450 restaurants after cleaning. Warm start 1.1 s. A typical query yields only ~8 candidates (not 300–400). |
 | 2 | LLM ranking | ✅ | 2026-10-15 | 90 tests pass offline. Golden queries G1–G5 (+G4b) on Groq `openai/gpt-oss-120b`: grounding, fact accuracy, and constraint fit 100%; 1.7–3.2 s; ≤ 3.8k tokens. Drills 2.4 and 2.5 pass. `CANDIDATE_LIMIT` lowered to 50 for the free tier (8k tokens per minute). |
-| 3 | Frontend and wrap-up | ⬜ | | |
+| 3 | Frontend and wrap-up | ✅ | 2026-10-15 | 102 tests pass offline (12 Streamlit UI tests via AppTest). Live end-to-end works through the UI. Fresh-clone README walkthrough passes (first-run download took 193 s). Check 3.2 grep is clean. |
 
 Status key: ⬜ not started · 🟨 in progress · ✅ passed · ❌ failed
 
@@ -127,11 +127,11 @@ All of these must be ✅ before the project is considered complete.
 
 | Req | Verified by | ✅ |
 |---|---|---|
-| R1, R2 Ingestion and fields | 1.1, 1.5, 1.7 | ⬜ |
-| R3 User input | 1.3, 3.1, 3.3 | ⬜ |
-| R4 Filter | 1.2, 1.9, 1.10 | ⬜ |
-| R5, R6 Prompt | 2.1, G1–G5 | ⬜ |
-| R7 Rank | G1–G5 (grounding, constraint fit) | ⬜ |
-| R8 Explain | G1–G5 (explanation quality) | ⬜ |
-| R9 Summarize | G1–G5 (summary present) | ⬜ |
-| R10 Display | 3.1, 3.8 | ⬜ |
+| R1, R2 Ingestion and fields | 1.1, 1.5, 1.7 | ✅ |
+| R3 User input | 1.3, 3.1, 3.3 | ✅ |
+| R4 Filter | 1.2, 1.9, 1.10 | ✅ |
+| R5, R6 Prompt | 2.1, G1–G5 | ✅ |
+| R7 Rank | G1–G5 (grounding, constraint fit) | ✅ |
+| R8 Explain | G1–G5 (explanation quality) | ✅ |
+| R9 Summarize | G1–G5 (summary present) | ✅ |
+| R10 Display | 3.1, 3.8 | ✅ |
