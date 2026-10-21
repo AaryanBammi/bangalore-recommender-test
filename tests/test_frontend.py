@@ -8,7 +8,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 APP = str(Path(__file__).resolve().parent.parent / "frontend" / "app.py")
-OPTIONS = {"locations": ["BTM", "Indiranagar"], "cuisines": ["chinese", "north indian"]}
+OPTIONS = {"locations": ["BTM", "Indiranagar"], "cuisines": ["afghan", "chinese", "north indian"]}
 
 
 def item(rank, explanation="Fits your budget.", rating=4.2, cost=500):
@@ -66,9 +66,23 @@ def test_form_populated_from_options(run):
     at = run(FakeHttp(), submit=False)
     assert not at.exception
     assert at.selectbox[0].options == ["BTM", "Indiranagar"] and at.selectbox[0].value == "Indiranagar"
-    assert at.radio[0].value == "medium"
-    assert at.slider[0].value == 3.5
-    assert "Data covers Bangalore only." in texts(at)
+    assert at.segmented_control[0].value == "medium"
+    assert at.segmented_control[1].value == 3.5
+    assert at.pills[0].options == ["North Indian", "Chinese"]  # popular cuisines as chips
+    assert at.multiselect[0].options == ["Afghan"]  # the rest live in "More cuisines"
+    body = texts(at)
+    assert "Data covers Bangalore only." in body and "Your table is waiting" in body
+
+
+def test_selected_cuisines_sent(run):
+    fake = FakeHttp()
+    at = run(fake, submit=False)
+    at.pills[0].set_value(["chinese"]).run()
+    at.multiselect[0].set_value(["afghan"]).run()
+    at.segmented_control[0].set_value("high").run()
+    at.button[0].click().run()
+    assert fake.posted[-1]["cuisines"] == ["chinese", "afghan"]
+    assert fake.posted[-1]["budget"] == "high"
 
 
 def test_submit_sends_payload_and_renders_cards(run):
@@ -77,18 +91,19 @@ def test_submit_sends_payload_and_renders_cards(run):
     assert fake.posted == [{"location": "Indiranagar", "budget": "medium", "cuisines": [],
                             "min_rating": 3.5, "preference": ""}]
     body = texts(at)
-    assert "**Summary:** Great picks." in body
+    assert "Your top 5 in Indiranagar" in body and "Great picks." in body
     for i in range(1, 6):
-        assert f"#### {i}. Place {i}" in body
-    assert "⭐ **4.2**" in body and "₹ **500** for two" in body
-    assert "Fits your budget." in body
+        assert f'<span class="rr-rank">{i}</span>' in body and f"Place {i}</h3>" in body
+    assert "4.2</span>" in body and "₹500 for two" in body
+    assert "Why we picked this" in body and "Fits your budget." in body
+    assert "Your table is waiting" not in body
     assert not at.error and not at.warning
 
 
 def test_null_rating_and_cost_shown_as_text(run):
     at = run(FakeHttp(post_result=result(recommendations=[item(1, rating=None, cost=None)])))
     body = texts(at)
-    assert "⭐ Unrated" in body and "₹ Cost N/A" in body
+    assert ">Unrated</span>" in body and "Cost N/A" in body
     assert "None" not in body and "nan" not in body
 
 
@@ -97,7 +112,7 @@ def test_degraded_shows_banner_and_hides_explanations(run):
                   recommendations=[item(i, explanation=None) for i in range(1, 6)])
     at = run(FakeHttp(post_result=data))
     assert "AI explanations are unavailable" in at.warning[0].value
-    assert "Summary" not in texts(at)
+    assert "Why we picked this" not in texts(at)
 
 
 def test_notes_shown_as_info(run):
@@ -108,13 +123,15 @@ def test_notes_shown_as_info(run):
 def test_empty_state(run):
     at = run(FakeHttp(post_result=result(recommendations=[], summary=None,
                                          notes=["No restaurants match your preferences."])))
-    assert any("No matches" in i.value for i in at.info)
+    assert any("No restaurants match" in i.value for i in at.info)
+    assert "No matches this time" in texts(at)
 
 
 def test_backend_down_on_load(run):
     at = run(FakeHttp(options=httpx.ConnectError("refused")), submit=False)
-    assert "Backend not reachable" in at.error[0].value
-    assert not at.button  # form hidden
+    assert "Backend not reachable" in texts(at)
+    assert not at.selectbox  # search panel hidden
+    assert at.button[0].label == "Try again"
 
 
 def test_backend_down_on_submit(run):

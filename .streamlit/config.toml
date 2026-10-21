@@ -1,0 +1,22 @@
+[theme]
+base = "light"
+primaryColor = "#B5472A"
+backgroundColor = "#FBF7F0"
+secondaryBackgroundColor = "#F5EFE5"
+textColor = "#2B2A28"
+borderColor = "#E4DCCF"
+linkColor = "#A63F22"
+font = "Nunito:https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap"
+headingFont = "Nunito:https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap"
+baseRadius = "12px"
+showWidgetBorder = true
+# Alerts: info in sage, warnings and errors in warm tints.
+blueBackgroundColor = "#EAF0E4"
+blueTextColor = "#46603E"
+orangeBackgroundColor = "#FBF3EA"
+orangeTextColor = "#93431F"
+redBackgroundColor = "#FBEAE2"
+redTextColor = "#8E3519"
+
+[client]
+toolbarMode = "minimal"
