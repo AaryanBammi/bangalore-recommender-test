@@ -12,6 +12,7 @@ Streamlit UI ──HTTP──▶ FastAPI backend: catalogue ─▶ filter (≤ 5
 ## Requirements
 
 - Python 3.11+ (developed on 3.12)
+- Node.js 24 for the web frontend (`web/`)
 - A Groq API key, available from [console.groq.com/keys](https://console.groq.com/keys). The free tier works (see [Limits](#limits)).
 
 ## Setup
@@ -53,11 +54,18 @@ Check that it's up at <http://localhost:8000/health>. API docs are at <http://lo
 
 **2. Frontend**
 
+The deployed frontend is the Next.js app in `web/`. Its `/api/*` route handlers forward requests to the backend, so the browser never calls the backend directly:
+
 ```bash
-streamlit run frontend/app.py
+cd web
+npm install
+cp .env.example .env.local   # BACKEND_URL=http://localhost:8000
+npm run dev
 ```
 
-Then open <http://localhost:8501>.
+Then open <http://localhost:3000>.
+
+The original Streamlit UI still works (`streamlit run frontend/app.py`, then <http://localhost:8501>). It will be removed once the Vercel deployment is verified ([docs/deployment.md](docs/deployment.md) §5, step 5).
 
 ## API
 
@@ -84,6 +92,14 @@ pytest
 
 All tests run offline. They use a small fake catalogue and a mocked LLM, so they need no network access and no API key. The suite covers data cleaning, filtering, the API, the LLM integration, and the Streamlit UI (through `streamlit.testing`).
 
+The web frontend has its own offline suite (Vitest and React Testing Library, with `fetch` mocked). It covers the UI states and the proxy route handlers:
+
+```bash
+cd web
+npm test
+npm run typecheck
+```
+
 ## Limits
 
 - **Groq free tier:** 8,000 tokens per minute. Each request uses about 1–4k tokens, so expect about 2–3 recommendations per minute. Beyond that, responses fall back to `degraded` (top-rated matches without AI explanations). On a paid tier you can raise `CANDIDATE_LIMIT`.
@@ -93,8 +109,9 @@ All tests run offline. They use a small fake catalogue and a mocked LLM, so they
 
 ```text
 backend/    api.py (FastAPI) · catalogue.py (ingestion) · filters.py · llm.py (Groq) · models.py
-frontend/   app.py (Streamlit; talks to the backend over HTTP only)
+web/        Next.js frontend deployed to Vercel (app/, components/, lib/, __tests__/)
+frontend/   app.py (original Streamlit UI; talks to the backend over HTTP only)
 tests/      pytest suite (offline)
 scripts/    data_check.py (Phase 0 dataset verification)
-docs/       problem statement, context, architecture, plan, edge cases, eval
+docs/       problem statement, context, architecture, plan, edge cases, eval, deployment
 ```

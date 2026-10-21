@@ -41,7 +41,20 @@ Browser ──▶ Vercel (Next.js, web/) ──HTTPS + X-API-Key──▶ Railwa
 
 ## 3. Frontend Rebuild (`web/`)
 
-**Stack:** Next.js (App Router, TypeScript), plain CSS, Nunito through `next/font/google`. Tests: Vitest + React Testing Library. No UI kit is needed; the existing CSS in `frontend/app.py` ports almost directly.
+**Status: built.** `npm test` passes 23 tests (15 UI, 8 route handler), and `npm run typecheck` and `next build` are clean. A local run against the real backend, with `BACKEND_API_KEY` set on both sides, checked the following:
+- The proxy returns real results with explanations.
+- A 400 from the backend passes through to the UI with its message.
+- A key mismatch reaches the browser as a 502, so the API key is never mentioned.
+- Neither the key nor the backend URL appears in `.next/static`.
+- There's no horizontal scroll at 390 px or 1280 px.
+
+**Stack:** Next.js 16 (App Router, TypeScript), plain CSS, Nunito through `next/font/google`. Tests: Vitest + React Testing Library. No UI kit is used; the CSS from `frontend/app.py` was ported almost directly.
+
+**Proxy behaviour** (`web/lib/backend.ts`):
+- Adds `X-API-Key` to each forwarded request.
+- Passes 2xx and 4xx responses through unchanged.
+- Turns an unreachable backend, a missing `BACKEND_URL`, or a backend 401 into 502, and a timeout into 504.
+- Options get a 10 s timeout and a 300 s CDN cache on success. Recommendations get a 57 s timeout, which is under `maxDuration = 60`.
 
 ```text
 web/
@@ -104,7 +117,7 @@ Add route handler tests:
 
 ### 3.3 Vercel project settings
 
-- **Root directory:** `web` · **Framework preset:** Next.js (auto-detected)
+- **Root directory:** `web` · **Framework preset:** Next.js (auto-detected) · **Node:** 24.x (from `engines` in `web/package.json`)
 - **Environment variables** (Production and Preview), **server-only**, so **no `NEXT_PUBLIC_` prefix:**
   - `BACKEND_URL`: the Railway URL
   - `BACKEND_API_KEY`: the same value as on Railway
