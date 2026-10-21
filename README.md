@@ -35,6 +35,7 @@ cp .env.example .env
 | `CANDIDATE_LIMIT` | `50` | Maximum number of filtered restaurants sent to the LLM |
 | `TOP_K` | `5` | Number of recommendations returned |
 | `API_URL` | `http://localhost:8000` | Where the frontend finds the backend |
+| `BACKEND_API_KEY` | (blank) | If set, `/options` and `/recommendations` require it in an `X-API-Key` header, and `/docs` is hidden. Used in deployment ([docs/deployment.md](docs/deployment.md)); leave blank locally |
 
 ## Run
 

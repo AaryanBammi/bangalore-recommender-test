@@ -144,3 +144,40 @@ def test_no_matches_returns_empty_with_note(client):
     data = resp.json()
     assert resp.status_code == 200 and data["recommendations"] == []
     assert "No restaurants match" in data["notes"][-1]
+
+
+# --- API key (deployment.md §4) ---
+
+@pytest.fixture
+def keyed_client(catalogue, ranker):
+    with TestClient(create_app(loader=lambda: catalogue, ranker=ranker, api_key="s3cret")) as c:
+        yield c
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-API-Key": "wrong"}, {"X-API-Key": "s3crét".encode()}])
+def test_api_key_rejected(keyed_client, ranker, headers):
+    assert keyed_client.get("/options", headers=headers).status_code == 401
+    assert keyed_client.post("/recommendations", json=body(), headers=headers).status_code == 401
+    assert ranker.calls == 0
+
+
+def test_api_key_accepted(keyed_client):
+    headers = {"X-API-Key": "s3cret"}
+    assert keyed_client.get("/options", headers=headers).status_code == 200
+    resp = keyed_client.post("/recommendations", json=body(), headers=headers)
+    assert resp.status_code == 200 and len(resp.json()["recommendations"]) == 5
+
+
+def test_api_key_not_needed_for_health(keyed_client):
+    assert keyed_client.get("/health").status_code == 200
+
+
+def test_api_key_hides_docs(keyed_client, client):
+    assert keyed_client.get("/docs").status_code == 404
+    assert keyed_client.get("/openapi.json").status_code == 404
+    assert client.get("/docs").status_code == 200
+
+
+def test_no_api_key_configured_means_open(client):
+    assert client.get("/options").status_code == 200
+    assert client.post("/recommendations", json=body()).status_code == 200

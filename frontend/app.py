@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
+API_HEADERS = {"X-API-Key": key} if (key := os.getenv("BACKEND_API_KEY")) else {}
 REQUEST_TIMEOUT_S = 60
 DEFAULT_LOCATION = "Indiranagar"
 # Shown as chips; every other cuisine sits in the "More cuisines" expander.
@@ -143,7 +144,7 @@ class BackendError(Exception):
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_options() -> dict:
     # Exceptions are not cached, so a down backend is retried on the next rerun.
-    resp = httpx.get(f"{API_URL}/options", timeout=10)
+    resp = httpx.get(f"{API_URL}/options", headers=API_HEADERS, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
@@ -160,7 +161,8 @@ def _error_detail(resp: httpx.Response) -> str:
 
 def get_recommendations(payload: dict) -> dict:
     try:
-        resp = httpx.post(f"{API_URL}/recommendations", json=payload, timeout=REQUEST_TIMEOUT_S)
+        resp = httpx.post(f"{API_URL}/recommendations", json=payload, headers=API_HEADERS,
+                          timeout=REQUEST_TIMEOUT_S)
     except httpx.TimeoutException:
         raise BackendError("The request timed out. Please try again.")
     except httpx.HTTPError:

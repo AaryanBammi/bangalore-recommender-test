@@ -1,5 +1,6 @@
 .env
-data/
+data/*
+!data/restaurants.parquet
 __pycache__/
 .venv/
 .pytest_cache/

@@ -24,7 +24,7 @@ Status key: ⬜ not started · 🟨 in progress · ✅ passed · ❌ failed
 |---|---|---|---|
 | 0.1 | Dependencies install | `pip install -r requirements.txt` | Exit code 0 |
 | 0.2 | Test runner works | `pytest` | "no tests ran", with no errors |
-| 0.3 | Secrets are ignored | `git check-ignore .env data/` | Both paths printed |
+| 0.3 | Secrets are ignored | `git check-ignore .env data/scratch.tmp` | Both paths printed (`data/restaurants.parquet` is committed for deployment; see [deployment.md](deployment.md)) |
 | 0.4 | `.env.example` is complete | Inspect the file | It has all 6 variables: `GROQ_API_KEY`, `LLM_MODEL`, `LLM_TIMEOUT_S`, `CANDIDATE_LIMIT`, `TOP_K`, `API_URL` |
 | 0.5 | Rating formats known | Data check script | Distinct non-numeric `rate` values listed in context §3.2 |
 | 0.6 | Cost format known | Data check script | Comma presence confirmed or ruled out in context §3.2 |
@@ -47,7 +47,7 @@ Status key: ⬜ not started · 🟨 in progress · ✅ passed · ❌ failed
 ### Manual
 | # | Check | How | Pass if |
 |---|---|---|---|
-| 1.5 | First-run ingestion | Delete `data/`, run `uvicorn backend.api:app` | Creates `data/restaurants.parquet` and the server starts |
+| 1.5 | First-run ingestion | Delete `data/restaurants.parquet`, run `uvicorn backend.api:app` (restore with `git checkout data/` after) | Creates `data/restaurants.parquet` and the server starts |
 | 1.6 | Warm start | Restart the server | Starts in **< 5 s** with no download |
 | 1.7 | Catalogue sanity | `curl :8000/health` | `rows` equals the deduplicated count from 0.7 |
 | 1.8 | Options | `curl :8000/options` | Non-empty, sorted `locations` and `cuisines`, with no `"null"` or empty strings |

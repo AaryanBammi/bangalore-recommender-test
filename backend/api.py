@@ -2,12 +2,13 @@
 
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 from typing import Callable
 
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
 from backend.catalogue import Catalogue, load_catalogue
 from backend.filters import filter_restaurants
@@ -24,6 +25,8 @@ CANDIDATE_LIMIT = int(os.getenv("CANDIDATE_LIMIT", "50"))
 TOP_K = int(os.getenv("TOP_K", "5"))
 LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
 LLM_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_S", "25"))
+# When set (deployment), /options and /recommendations require a matching X-API-Key header.
+BACKEND_API_KEY = os.getenv("BACKEND_API_KEY") or None
 if CANDIDATE_LIMIT <= 0 or TOP_K <= 0 or TOP_K > CANDIDATE_LIMIT:
     raise RuntimeError("Invalid config: need 0 < TOP_K <= CANDIDATE_LIMIT")
 
@@ -50,7 +53,8 @@ def _to_item(rank: int, row: pd.Series, explanation: str | None = None) -> Recom
 
 
 def create_app(loader: Callable[[], Catalogue] = load_catalogue,
-               ranker: Ranker | None = None) -> FastAPI:
+               ranker: Ranker | None = None,
+               api_key: str | None = BACKEND_API_KEY) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.ranker = ranker or _default_ranker()
@@ -58,19 +62,26 @@ def create_app(loader: Callable[[], Catalogue] = load_catalogue,
         logging.info("Catalogue loaded: %d restaurants", len(app.state.catalogue))
         yield
 
-    app = FastAPI(title="Restaurant Recommender", lifespan=lifespan)
+    def require_api_key(x_api_key: str | None = Header(default=None)):
+        if api_key and not (x_api_key and secrets.compare_digest(x_api_key.encode(), api_key.encode())):
+            raise HTTPException(401, "Missing or invalid X-API-Key header.")
+
+    # A keyed (deployed) backend also hides its API docs.
+    docs = {"docs_url": None, "redoc_url": None, "openapi_url": None} if api_key else {}
+    app = FastAPI(title="Restaurant Recommender", lifespan=lifespan, **docs)
+    keyed = [Depends(require_api_key)]
 
     # Endpoints are plain `def` so blocking work runs in the threadpool (edge_case O5).
     @app.get("/health")
     def health(request: Request):
         return {"status": "ok", "rows": len(request.app.state.catalogue)}
 
-    @app.get("/options")
+    @app.get("/options", dependencies=keyed)
     def options(request: Request):
         catalogue: Catalogue = request.app.state.catalogue
         return {"locations": catalogue.locations(), "cuisines": catalogue.cuisines()}
 
-    @app.post("/recommendations", response_model=RecommendationResponse)
+    @app.post("/recommendations", response_model=RecommendationResponse, dependencies=keyed)
     def recommendations(req: RecommendationRequest, request: Request):
         catalogue: Catalogue = request.app.state.catalogue
         location = catalogue.resolve_location(req.location)
