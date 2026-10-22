@@ -6,6 +6,9 @@ import type { Options, RecommendationRequest, RecommendationResponse } from "@/l
 import { SearchPanel } from "./SearchPanel";
 import { BackendDown, Banner, Header, Results, Skeleton, WelcomeState } from "./States";
 
+// After this long, the backend is probably waking from sleep (deployment.md D2).
+const SLOW_LOAD_MS = 5_000;
+
 type View =
   | { kind: "welcome" }
   | { kind: "loading" }
@@ -17,6 +20,7 @@ export function Recommender() {
   const [optionsFailed, setOptionsFailed] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [view, setView] = useState<View>({ kind: "welcome" });
+  const [slowLoad, setSlowLoad] = useState(false);
 
   const loadOptions = useCallback(async () => {
     setRetrying(true);
@@ -34,6 +38,13 @@ export function Recommender() {
     loadOptions();
   }, [loadOptions]);
 
+  const waiting = !options && !optionsFailed;
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => setSlowLoad(true), SLOW_LOAD_MS);
+    return () => clearTimeout(timer);
+  }, [waiting]);
+
   async function search(payload: RecommendationRequest) {
     setView({ kind: "loading" });
     try {
@@ -49,7 +60,9 @@ export function Recommender() {
       {optionsFailed ? (
         <BackendDown onRetry={loadOptions} retrying={retrying} />
       ) : !options ? (
-        <p className="rr-muted" role="status">Loading neighbourhoods…</p>
+        <p className="rr-muted" role="status">
+          {slowLoad ? "Waking up the server. This can take up to a minute after a quiet spell…" : "Loading neighbourhoods…"}
+        </p>
       ) : (
         <>
           <SearchPanel options={options} busy={view.kind === "loading"} onSubmit={search} />

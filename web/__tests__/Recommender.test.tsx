@@ -1,6 +1,6 @@
 // Port of tests/test_frontend.py: the UI with /api/* faked.
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Recommender } from "@/components/Recommender";
@@ -111,6 +111,19 @@ describe("Recommender", () => {
     await renderAndSubmit();
     expect(await screen.findByText("No matches this time")).toBeInTheDocument();
     expect(screen.getByText("Lowered rating to 3.0.")).toBeInTheDocument();
+  });
+
+  it("explains a slow first load while the backend wakes up", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+      render(<Recommender />);
+      expect(screen.getByRole("status")).toHaveTextContent("Loading neighbourhoods…");
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(screen.getByRole("status")).toHaveTextContent("Waking up the server");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the backend-down state on load and retries", async () => {

@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: restaurant-recommender-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GROQ_API_KEY
+        sync: false        # set in the dashboard; never committed
+      - key: BACKEND_API_KEY
+        generateValue: true  # copy it from the dashboard into Vercel
+      - key: LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: LLM_TIMEOUT_S
+        value: "25"
+      - key: CANDIDATE_LIMIT
+        value: "50"
+      - key: TOP_K
+        value: "5"

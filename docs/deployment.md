@@ -8,7 +8,7 @@
 ## 1. Target Setup
 
 ```text
-Browser ──▶ Vercel (Next.js, web/) ──HTTPS + X-API-Key──▶ Railway (FastAPI, backend.api:app) ──▶ Groq API
+Browser ──▶ Vercel (Next.js, web/) ──HTTPS + X-API-Key──▶ Render (FastAPI, backend.api:app) ──▶ Groq API
             pages + /api/* route handlers                 secrets: GROQ_API_KEY, BACKEND_API_KEY
             secrets: BACKEND_URL, BACKEND_API_KEY         data/restaurants.parquet (committed)
 ```
@@ -16,10 +16,10 @@ Browser ──▶ Vercel (Next.js, web/) ──HTTPS + X-API-Key──▶ Railwa
 | Part | Host | Notes |
 |---|---|---|
 | Frontend | **Vercel** | A new Next.js app in `web/` replaces the Streamlit UI (§3). Vercel runs only static files and short serverless functions, so it can't host Streamlit, which needs a long-running server with a WebSocket per browser |
-| Backend | **Railway** | Runs the existing FastAPI app unchanged apart from an API-key check (§4). Always on by default; no sleep |
+| Backend | **Render** (free web service) | Runs the existing FastAPI app unchanged apart from an API-key check (§4). Configured by `render.yaml`. Sleeps when idle (D2). Railway was the first choice, but the backend moved to Render after Railway was down for an extended period |
 | LLM | Groq (existing key) | No change |
 
-**Why the frontend proxies through Vercel route handlers:** the browser calls `/api/options` and `/api/recommendations` on the Vercel domain, and those handlers call Railway on the server side. This means:
+**Why the frontend proxies through Vercel route handlers:** the browser calls `/api/options` and `/api/recommendations` on the Vercel domain, and those handlers call Render on the server side. This means:
 - The backend URL and its API key never reach the browser.
 - No CORS setup is needed on the backend.
 - The backend can reject anyone who isn't the frontend, which protects the Groq quota (D3).
@@ -30,8 +30,8 @@ Browser ──▶ Vercel (Next.js, web/) ──HTTPS + X-API-Key──▶ Railwa
 
 | # | Constraint | Impact | Handling |
 |---|---|---|---|
-| D1 | Railway's container disk is **ephemeral** (no volume attached) | Without the parquet in the repo, every deploy rebuilds the catalogue from Hugging Face. The first-run download took **193 s** in Gate 3 | **Commit the parquet** (845 KB), so startup is ~1 s. Done on the `deploy-prep` branch |
-| D2 | Railway isn't free past the trial | The trial gives a one-time credit, then the Hobby plan is a monthly fee that includes some usage. One small always-on service should fit within it. Check current pricing at railway.com/pricing | Leave Railway's optional "serverless" sleep setting **off**, so there are no cold starts |
+| D1 | Render's free disk is **ephemeral**: it's wiped on every deploy and restart | Without the parquet in the repo, every deploy rebuilds the catalogue from Hugging Face. The first-run download took **193 s** in Gate 3 | **Commit the parquet** (845 KB), so startup is ~1 s. Done on the `deploy-prep` branch |
+| D2 | Render's free tier **sleeps after 15 min** idle; waking takes ~30–60 s | The first visitor after a quiet spell waits. With the original 10 s proxy timeout, that visitor would always have seen the "can't reach the kitchen" state | The `/api/options` route waits up to 57 s (`maxDuration = 60`). After 5 s the page says "Waking up the server…". To avoid sleeping entirely, ping `/health` every 10 min (§8) or upgrade the service to a paid instance |
 | D3 | A public backend with no auth | Anyone with the URL could spend the Groq quota | `BACKEND_API_KEY` shared secret, sent only by the Vercel route handlers (§4) |
 | D4 | Groq free tier: 8k tokens/min | ~2–3 recommendations per minute across **all** users; beyond that, responses are `degraded` | Acceptable for a demo. The UI already explains degraded results |
 | D5 | Vercel function duration limit | A slow Groq call plus one retry can take up to ~55 s | Set `maxDuration = 60` on the recommendations route handler (within the Hobby limit) |
@@ -41,7 +41,7 @@ Browser ──▶ Vercel (Next.js, web/) ──HTTPS + X-API-Key──▶ Railwa
 
 ## 3. Frontend Rebuild (`web/`)
 
-**Status: built.** `npm test` passes 23 tests (15 UI, 8 route handler), and `npm run typecheck` and `next build` are clean. A local run against the real backend, with `BACKEND_API_KEY` set on both sides, checked the following:
+**Status: built.** `npm test` passes 24 tests (16 UI, 8 route handler), and `npm run typecheck` and `next build` are clean. A local run against the real backend, with `BACKEND_API_KEY` set on both sides, checked the following:
 - The proxy returns real results with explanations.
 - A 400 from the backend passes through to the UI with its message.
 - A key mismatch reaches the browser as a 502, so the API key is never mentioned.
@@ -54,7 +54,7 @@ Browser ──▶ Vercel (Next.js, web/) ──HTTPS + X-API-Key──▶ Railwa
 - Adds `X-API-Key` to each forwarded request.
 - Passes 2xx and 4xx responses through unchanged.
 - Turns an unreachable backend, a missing `BACKEND_URL`, or a backend 401 into 502, and a timeout into 504.
-- Options get a 10 s timeout and a 300 s CDN cache on success. Recommendations get a 57 s timeout, which is under `maxDuration = 60`.
+- Options get a 57 s timeout (enough for a Render cold start, D2) and a 300 s CDN cache on success. Recommendations get a 57 s timeout, which is under `maxDuration = 60`.
 
 ```text
 web/
@@ -119,37 +119,31 @@ Add route handler tests:
 
 - **Root directory:** `web` · **Framework preset:** Next.js (auto-detected) · **Node:** 24.x (from `engines` in `web/package.json`)
 - **Environment variables** (Production and Preview), **server-only**, so **no `NEXT_PUBLIC_` prefix:**
-  - `BACKEND_URL`: the Railway URL
-  - `BACKEND_API_KEY`: the same value as on Railway
+  - `BACKEND_URL`: the Render URL
+  - `BACKEND_API_KEY`: the same value as on Render
 - **Local dev:** put the same variables in `web/.env.local`, with `BACKEND_URL=http://localhost:8000`. Add `.env.local` to `.gitignore`.
 
 ---
 
-## 4. Backend Changes (for Railway)
+## 4. Backend Changes (for Render)
 
 Already done on the `deploy-prep` branch:
 1. `data/restaurants.parquet` is committed (`.gitignore` now ignores `data/*` except that file).
 2. `requirements.txt` is pinned to the versions that passed Gates 0–3.
-3. `.python-version` is set to `3.12`, which Railway's builder reads.
-4. `railway.json` sets the start command and health check:
-   ```json
-   {
-     "$schema": "https://railway.com/railway.schema.json",
-     "deploy": {
-       "startCommand": "uvicorn backend.api:app --host 0.0.0.0 --port $PORT",
-       "healthcheckPath": "/health",
-       "restartPolicyType": "ON_FAILURE"
-     }
-   }
-   ```
+3. `.python-version` is set to `3.12`, and `render.yaml` also pins `PYTHON_VERSION=3.12.7`.
+4. `render.yaml` (a Render Blueprint) defines the free web service:
+   - **Build:** `pip install -r requirements.txt`
+   - **Start:** `uvicorn backend.api:app --host 0.0.0.0 --port $PORT`
+   - **Health check:** `/health`
+   - **Variables:** the tuning defaults. `GROQ_API_KEY` is prompted for (`sync: false`), and `BACKEND_API_KEY` is generated by Render (`generateValue: true`).
 
 Also done:
 
-5. **API-key check (D3).** If the `BACKEND_API_KEY` env var is set, `/options` and `/recommendations` reject requests without a matching `X-API-Key` header (401). `/health` stays open for Railway's health check. If the variable is unset (local dev and tests), nothing changes. Use `secrets.compare_digest` for the comparison. Tests cover a missing key, a wrong key, a non-ASCII key, the right key, and the key being unset. The Streamlit UI also sends the key when it's set, so local dev keeps working.
+5. **API-key check (D3).** If the `BACKEND_API_KEY` env var is set, `/options` and `/recommendations` reject requests without a matching `X-API-Key` header (401). `/health` stays open for Render's health check. If the variable is unset (local dev and tests), nothing changes. Use `secrets.compare_digest` for the comparison. Tests cover a missing key, a wrong key, a non-ASCII key, the right key, and the key being unset. The Streamlit UI also sends the key when it's set, so local dev keeps working.
 6. **Hide the API docs in production:** `/docs`, `/redoc`, and `/openapi.json` return 404 when `BACKEND_API_KEY` is set.
 7. `BACKEND_API_KEY` is in `.env.example` (blank) and the README config table.
 
-No CORS change is needed, because the browser never calls Railway directly.
+No CORS change is needed, because the browser never calls Render directly.
 
 ---
 
@@ -157,29 +151,24 @@ No CORS change is needed, because the browser never calls Railway directly.
 
 ### Step 0: Push to GitHub
 
-The repo has no remote yet. Create a GitHub repository (public or private), then:
+Done: the code is at <https://github.com/AaryanBammi/bangalore-recommender-test>, branch `main`.
 
-```bash
-git remote add origin git@github.com:<user>/<repo>.git
-git push -u origin main
-```
+### Step 1: Deploy the backend (Render)
 
-### Step 1: Deploy the backend (Railway)
+1. In the Render dashboard, go to **New → Blueprint**, connect the GitHub repo, and pick branch `main`. Render reads `render.yaml` and proposes one free web service, `restaurant-recommender-api`.
+2. When prompted, paste your `GROQ_API_KEY`. Render generates `BACKEND_API_KEY` by itself.
+3. Apply. Once it's live, open the service → **Environment** and copy `BACKEND_API_KEY` for Vercel.
+4. Note the public URL, e.g. `https://restaurant-recommender-api.onrender.com`.
+5. In the deploy logs, expect `Catalogue loaded: 12450 restaurants` within seconds. A Hugging Face download in the logs means the parquet isn't committed (D1).
 
-1. Railway → **New Project → Deploy from GitHub repo** → pick the repo, branch `main`. Railway picks up `railway.json` and builds from `requirements.txt`.
-2. **Variables:**
-   - `GROQ_API_KEY`
-   - `BACKEND_API_KEY`: generate one with `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-   - Optionally `LLM_MODEL`, `LLM_TIMEOUT_S`, `CANDIDATE_LIMIT`, `TOP_K`
-3. **Settings → Networking → Generate Domain** to get a public URL, e.g. `https://restaurant-recommender-production.up.railway.app`.
-4. In the deploy logs, expect `Catalogue loaded: 12450 restaurants` within seconds. A Hugging Face download in the logs means the parquet isn't committed (D1).
+**Without the Blueprint:** go to **New → Web Service**, then enter the build and start commands and health check path from `render.yaml` by hand. Set `PYTHON_VERSION`, `GROQ_API_KEY`, and a `BACKEND_API_KEY` from `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 ### Step 2: Verify the backend
 
 ```bash
-BASE=https://<your-service>.up.railway.app
+BASE=https://<your-service>.onrender.com
 KEY=<BACKEND_API_KEY>
-curl -s $BASE/health                                         # {"status":"ok","rows":12450}
+curl -s $BASE/health                                         # {"status":"ok","rows":12450}; slow if asleep
 curl -s -o /dev/null -w '%{http_code}\n' $BASE/options       # 401 (no key)
 curl -s -H "X-API-Key: $KEY" $BASE/options | head -c 300     # locations + cuisines
 curl -s -X POST $BASE/recommendations -H "X-API-Key: $KEY" -H 'content-type: application/json' \
@@ -192,7 +181,7 @@ Pass if the last call returns 5 recommendations with explanations and `"degraded
 
 1. Vercel → **Add New → Project** → import the repo. Set **Root Directory** to `web`.
 2. Add `BACKEND_URL` and `BACKEND_API_KEY` (§3.3).
-3. Deploy. Every push to `main` deploys to production, and every other branch or PR gets a preview URL. Previews call the same Railway backend, so they share its Groq quota.
+3. Deploy. Every push to `main` deploys to production, and every other branch or PR gets a preview URL. Previews call the same Render backend, so they share its Groq quota.
 
 ### Step 4: Verify end to end
 
@@ -204,17 +193,18 @@ Run these against the Vercel URL, in a private browser window:
 | V2 | Happy path | Indiranagar · medium · north indian · 4.0 returns 5 cards with explanations |
 | V3 | Relaxed filters | A narrow query (e.g. low budget + 4.5 rating) shows notes about what was relaxed |
 | V4 | No matches | Shows the "No matches this time" state, not an error |
-| V5 | Backend down | Temporarily remove `BACKEND_URL` or stop the Railway service: the page shows the "can't reach the kitchen" state |
+| V5 | Backend down | Temporarily remove `BACKEND_URL` or suspend the Render service: the page shows the "can't reach the kitchen" state |
 | V6 | Degraded mode | Fire 5+ requests within a minute; later ones show results without explanations rather than failing |
-| V7 | Secrets | Neither the Railway URL nor any key appears in the page source, JS bundles, or browser network tab (only `/api/*` calls to the Vercel domain) |
-| V8 | Locked backend | Calling the Railway `/recommendations` without the key returns 401 |
+| V7 | Secrets | Neither the Render URL nor any key appears in the page source, JS bundles, or browser network tab (only `/api/*` calls to the Vercel domain) |
+| V8 | Locked backend | Calling the Render `/recommendations` without the key returns 401 |
 | V9 | Mobile | Works at phone width with no horizontal scroll |
+| V10 | Cold start | After the backend has been idle for more than 15 min, the page shows "Waking up the server…" and then the form, with no error, within about a minute |
 
 Record the outcome as a new row (Phase 4: Deployment) in the [eval.md](eval.md) progress tracker.
 
 ### Step 5: Clean up (after V1–V9 pass)
 
-- Delete `frontend/`, `.streamlit/`, and `tests/test_frontend.py`. Remove `streamlit` from `requirements.txt`, which also makes Railway builds smaller.
+- Delete `frontend/`, `.streamlit/`, and `tests/test_frontend.py`. Remove `streamlit` from `requirements.txt`, which also makes Render builds smaller.
 - Update the README (run instructions, layout, `API_URL` → `BACKEND_URL`) and the frontend section of [architecture.md](architecture.md).
 
 ---
@@ -223,33 +213,34 @@ Record the outcome as a new row (Phase 4: Deployment) in the [eval.md](eval.md) 
 
 | Variable | Where | Value |
 |---|---|---|
-| `GROQ_API_KEY` | Railway | Your `gsk_…` key |
-| `BACKEND_API_KEY` | Railway **and** Vercel | The same random string in both |
-| `LLM_MODEL` | Railway | `openai/gpt-oss-120b` (or `openai/gpt-oss-20b` for speed) |
-| `LLM_TIMEOUT_S` | Railway | `25` |
-| `CANDIDATE_LIMIT` | Railway | `50` (keep low on Groq's free tier) |
-| `TOP_K` | Railway | `5` |
-| `BACKEND_URL` | Vercel | The Railway public URL, without a trailing slash |
+| `GROQ_API_KEY` | Render | Your `gsk_…` key |
+| `BACKEND_API_KEY` | Render **and** Vercel | Generated by Render; copy the same value into Vercel |
+| `LLM_MODEL` | Render | `openai/gpt-oss-120b` (or `openai/gpt-oss-20b` for speed) |
+| `LLM_TIMEOUT_S` | Render | `25` |
+| `CANDIDATE_LIMIT` | Render | `50` (keep low on Groq's free tier) |
+| `TOP_K` | Render | `5` |
+| `PYTHON_VERSION` | Render | `3.12.7` (set by `render.yaml`) |
+| `BACKEND_URL` | Vercel | The Render public URL, without a trailing slash |
 
-To rotate the API key, set the new value in Railway and Vercel, then redeploy both. Requests fail with 401 in the minute or so between the two.
+To rotate the API key, set the new value in Render and Vercel, then redeploy both. Requests fail with 401 in the minute or so between the two.
 
 ---
 
 ## 7. Rollback and Troubleshooting
 
 **Rollback:**
-- **Railway:** service → **Deployments** → open the last good deploy → **Redeploy**.
+- **Render:** service → **Events** → pick the last good deploy → **Rollback**.
 - **Vercel:** **Deployments** → last good one → **Promote to Production** (instant).
 - **Both:** `git revert` on `main` also works.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Railway health check fails | Parquet missing (Hugging Face download running), or the app crashed at startup | Check deploy logs. Commit the parquet; check `GROQ_API_KEY` is set |
-| Railway logs `GROQ_API_KEY is not set` | Variable missing | Add it under Variables; Railway redeploys |
-| UI shows "can't reach the kitchen" | `BACKEND_URL` wrong or missing, or Railway is down | Check the variable has `https://` and no trailing slash; hit `/health` directly |
-| Every request fails with an auth error | `BACKEND_API_KEY` differs between Vercel and Railway | Set the same value in both; redeploy Vercel (env changes need a redeploy) |
+| Render health check fails | Parquet missing (Hugging Face download running), or the app crashed at startup | Check deploy logs. Commit the parquet; check `GROQ_API_KEY` is set |
+| Render logs `GROQ_API_KEY is not set` | Variable missing | Add it under Environment and redeploy |
+| UI shows "can't reach the kitchen" | `BACKEND_URL` wrong or missing, or Render is down | Check the variable has `https://` and no trailing slash; hit `/health` directly |
+| Every request fails with an auth error | `BACKEND_API_KEY` differs between Vercel and Render | Set the same value in both; redeploy Vercel (env changes need a redeploy) |
 | Recommendations time out on Vercel | Function limit hit | Check `maxDuration = 60` is exported from the route; lower `LLM_TIMEOUT_S` |
-| Every result is `degraded` | Groq rate limit, bad key, or model renamed | Check the Groq error in Railway logs; try `openai/gpt-oss-20b` |
+| Every result is `degraded` | Groq rate limit, bad key, or model renamed | Check the Groq error in Render logs; try `openai/gpt-oss-20b` |
 
 ---
 
@@ -257,4 +248,4 @@ To rotate the API key, set the new value in Railway and Vercel, then redeploy bo
 
 1. **Per-IP rate limit** in the Vercel route handler (e.g. Upstash or Vercel KV), so one visitor can't use up the shared Groq quota.
 2. **CI:** a GitHub Action that runs `pytest` and `web` tests (`vitest`) on each push, so a red build never reaches `main` (both hosts deploy from it).
-3. **Railway usage alert** in billing settings, so a spike can't run past the plan.
+3. **Keep the backend awake (D2):** a free cron pinger (e.g. cron-job.org) hitting `/health` every 10 min. Render's free instance hours cover one always-on service. The alternative is a paid Render instance, which never sleeps.
